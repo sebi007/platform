@@ -13,6 +13,7 @@ class ProductExportGenerateTask extends ScheduledTask
 
     public static function getDefaultInterval(): int
     {
-        return 86400;
+        // minimum interval for exports is 120 seconds
+        return 60;
     }
 }

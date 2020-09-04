@@ -132,6 +132,7 @@ class ProductExportPartialGenerationHandler extends AbstractMessageHandler
 
         /** @var ProductExportEntity $productExport */
         $productExport = $productExports->first();
+
         $exportResult = $this->productExportGenerator->generate(
             $productExport,
             $exportBehavior
@@ -200,5 +201,15 @@ class ProductExportPartialGenerationHandler extends AbstractMessageHandler
         );
 
         $this->connection->delete('sales_channel_api_context', ['token' => $contextToken]);
+
+        $this->productExportRepository->update(
+            [
+                [
+                    'id' => $productExport->getId(),
+                    'generatedAt' => new \DateTime(),
+                ],
+            ],
+            $context->getContext()
+        );
     }
 }
