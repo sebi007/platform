@@ -2,6 +2,7 @@
 
 namespace Shopware\Core\Checkout\Cart\SalesChannel;
 
+use Doctrine\DBAL\Connection;
 use OpenApi\Annotations as OA;
 use Shopware\Core\Checkout\Cart\Cart;
 use Shopware\Core\Checkout\Cart\CartCalculator;
@@ -56,13 +57,19 @@ class CartOrderRoute extends AbstractCartOrderRoute
      */
     private $orderCustomerRepository;
 
+    /**
+     * @var Connection
+     */
+    private $connection;
+
     public function __construct(
         CartCalculator $cartCalculator,
         EntityRepositoryInterface $orderRepository,
         EntityRepositoryInterface $orderCustomerRepository,
         OrderPersisterInterface $orderPersister,
         CartPersisterInterface $cartPersister,
-        EventDispatcherInterface $eventDispatcher
+        EventDispatcherInterface $eventDispatcher,
+        Connection $connection
     ) {
         $this->cartCalculator = $cartCalculator;
         $this->orderRepository = $orderRepository;
@@ -70,6 +77,7 @@ class CartOrderRoute extends AbstractCartOrderRoute
         $this->cartPersister = $cartPersister;
         $this->eventDispatcher = $eventDispatcher;
         $this->orderCustomerRepository = $orderCustomerRepository;
+        $this->connection = $connection;
     }
 
     public function getDecorated(): AbstractCartOrderRoute
@@ -94,6 +102,8 @@ class CartOrderRoute extends AbstractCartOrderRoute
     public function order(Cart $cart, SalesChannelContext $context): CartOrderRouteResponse
     {
         $calculatedCart = $this->cartCalculator->calculate($cart, $context);
+
+        $this->connection->beginTransaction();
         $orderId = $this->orderPersister->persist($calculatedCart, $context);
 
         $criteria = new Criteria([$orderId]);
@@ -124,6 +134,8 @@ class CartOrderRoute extends AbstractCartOrderRoute
         );
 
         $this->eventDispatcher->dispatch($orderPlacedEvent);
+
+        $this->connection->commit();
 
         $this->cartPersister->delete($context->getToken(), $context);
 

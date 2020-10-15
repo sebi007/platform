@@ -8,6 +8,7 @@ use Shopware\Core\Checkout\Cart\LineItem\LineItem;
 use Shopware\Core\Checkout\Order\Aggregate\OrderLineItem\OrderLineItemDefinition;
 use Shopware\Core\Checkout\Order\OrderEvents;
 use Shopware\Core\Checkout\Order\OrderStates;
+use Shopware\Core\Content\Product\Cart\ProductOutOfStockError;
 use Shopware\Core\Content\Product\ProductDefinition;
 use Shopware\Core\Defaults;
 use Shopware\Core\Framework\Adapter\Cache\CacheClearer;
@@ -196,15 +197,39 @@ class StockUpdater implements EventSubscriberInterface
 
     public function orderPlaced(CheckoutOrderPlacedEvent $event): void
     {
+        $lineItems = $event->getOrder()->getLineItems();
+        if ($lineItems === null) {
+            return;
+        }
+
         $ids = [];
-        foreach ($event->getOrder()->getLineItems() as $lineItem) {
+        /** @var LineItem $lineItem */
+        foreach ($lineItems as $lineItem) {
             if ($lineItem->getType() !== LineItem::PRODUCT_LINE_ITEM_TYPE) {
                 continue;
             }
-            $ids[] = $lineItem->getReferencedId();
+            $ids[$lineItem->getReferencedId()] = $lineItem->getId();
         }
 
+        $productIds = array_keys($ids);
+
         $this->update($ids, $event->getContext());
+
+        // check closeouts below zero available_stock
+        $outOfStockIds = $this->connection->fetchColumn(
+            'SELECT id FROM product WHERE is_closeout AND available_stock < 0 AND id IN (:productIds)',
+            ['productIds' => Uuid::fromHexToBytesList($productIds)],
+            0,
+            ['productIds' => Connection::PARAM_STR_ARRAY]
+        );
+
+        if (!empty($outOfStockIds)) {
+            $outOfStockProductId = Uuid::fromBytesToHex($outOfStockIds[0]);
+            $lineItem = $lineItems->get($ids[$outOfStockProductId]);
+            $name = $lineItem !== null ? $lineItem->getLabel() : 'Product with id ' . $outOfStockProductId;
+
+            throw new ProductOutOfStockError($outOfStockIds[0], $name);
+        }
 
         $this->clearCache($ids);
     }
@@ -246,6 +271,8 @@ class StockUpdater implements EventSubscriberInterface
         if (empty($ids)) {
             return;
         }
+        // fake delay to force concurrent processing
+        sleep(10);
 
         $sql = '
 SELECT LOWER(HEX(order_line_item.product_id)) as product_id,
