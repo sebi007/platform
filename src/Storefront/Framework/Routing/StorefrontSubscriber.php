@@ -17,7 +17,8 @@ use Shopware\Core\Framework\Routing\KernelListenerPriorities;
 use Shopware\Core\Framework\Util\Random;
 use Shopware\Core\PlatformRequest;
 use Shopware\Core\SalesChannelRequest;
-use Shopware\Core\System\SalesChannel\Context\SalesChannelContextServiceInterface;
+use Shopware\Core\System\SalesChannel\Context\SalesChannelContextFactory;
+use Shopware\Core\System\SalesChannel\Context\SalesChannelContextService;
 use Shopware\Storefront\Controller\ErrorController;
 use Shopware\Storefront\Event\StorefrontRenderEvent;
 use Shopware\Storefront\Framework\Csrf\CsrfPlaceholderHandler;
@@ -49,9 +50,9 @@ class StorefrontSubscriber implements EventSubscriberInterface
     private $errorController;
 
     /**
-     * @var SalesChannelContextServiceInterface
+     * @var SalesChannelContextFactory
      */
-    private $contextService;
+    private $contextFactory;
 
     /**
      * @var bool
@@ -87,7 +88,7 @@ class StorefrontSubscriber implements EventSubscriberInterface
         RequestStack $requestStack,
         RouterInterface $router,
         ErrorController $errorController,
-        SalesChannelContextServiceInterface $contextService,
+        SalesChannelContextFactory $contextFactory,
         CsrfPlaceholderHandler $csrfPlaceholderHandler,
         HreflangLoaderInterface $hreflangLoader,
         bool $kernelDebug,
@@ -98,7 +99,7 @@ class StorefrontSubscriber implements EventSubscriberInterface
         $this->requestStack = $requestStack;
         $this->router = $router;
         $this->errorController = $errorController;
-        $this->contextService = $contextService;
+        $this->contextFactory = $contextFactory;
         $this->kernelDebug = $kernelDebug;
         $this->csrfPlaceholderHandler = $csrfPlaceholderHandler;
         $this->maintenanceModeResolver = $maintenanceModeResolver;
@@ -356,15 +357,16 @@ class StorefrontSubscriber implements EventSubscriberInterface
 
     private function setSalesChannelContext(ExceptionEvent $event): void
     {
-        $contextToken = $event->getRequest()->headers->get(PlatformRequest::HEADER_CONTEXT_TOKEN);
-        $salesChannelId = $event->getRequest()->attributes->get(PlatformRequest::ATTRIBUTE_SALES_CHANNEL_ID);
+        $contextToken = (string) $event->getRequest()->headers->get(PlatformRequest::HEADER_CONTEXT_TOKEN);
+        $salesChannelId = (string) $event->getRequest()->attributes->get(PlatformRequest::ATTRIBUTE_SALES_CHANNEL_ID);
+        $parameters = [
+            SalesChannelContextService::LANGUAGE_ID => $event->getRequest()->headers->get(PlatformRequest::HEADER_LANGUAGE_ID),
+            SalesChannelContextService::CURRENCY_ID => $event->getRequest()->headers->get(SalesChannelRequest::ATTRIBUTE_DOMAIN_CURRENCY_ID),
+        ];
 
-        $context = $this->contextService->get(
-            $salesChannelId,
-            $contextToken,
-            $event->getRequest()->headers->get(PlatformRequest::HEADER_LANGUAGE_ID),
-            $event->getRequest()->attributes->get(SalesChannelRequest::ATTRIBUTE_DOMAIN_CURRENCY_ID)
-        );
+        // do NOT load cart
+        $context = $this->contextFactory->create($contextToken, $salesChannelId, $parameters);
+
         $event->getRequest()->attributes->set(PlatformRequest::ATTRIBUTE_SALES_CHANNEL_CONTEXT_OBJECT, $context);
     }
 }

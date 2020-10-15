@@ -111,7 +111,7 @@
             <argument type="service" id="request_stack"/>
             <argument type="service" id="router"/>
             <argument type="service" id="Shopware\Storefront\Controller\ErrorController"/>
-            <argument type="service" id="Shopware\Core\System\SalesChannel\Context\SalesChannelContextService"/>
+            <argument type="service" id="Shopware\Core\System\SalesChannel\Context\SalesChannelContextFactory"/>
             <argument type="service" id="Shopware\Storefront\Framework\Csrf\CsrfPlaceholderHandler" />
             <argument type="service" id="Shopware\Core\Content\Seo\HreflangLoaderInterface" />
             <argument>%kernel.debug%</argument>
